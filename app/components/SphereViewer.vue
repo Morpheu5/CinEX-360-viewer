@@ -1,12 +1,17 @@
 <template>
     <aside id="debugger">
-        <p>{{ lat }}</p>
-        <p>{{ lon }}</p>
+        <p>lat: {{ lat }}</p>
+        <p>lon: {{ lon }}</p>
+        <p>x: {{ Math.floor(pointerX) }} &nbsp; y: {{ Math.floor(pointerY) }}</p>
     </aside>
     <div id="viewer" ref="viewer" />
 </template>
 
 <script setup lang="ts">
+    import { isDefined } from '@vueuse/core';
+import type {
+        Object3D
+    } from 'three';
     import {
         DoubleSide,
         LinearToneMapping,
@@ -16,10 +21,13 @@
         PerspectiveCamera,
         PlaneGeometry,
         Quaternion,
+        Raycaster,
         Scene,
         SphereGeometry,
         SRGBColorSpace,
         TextureLoader,
+        Vector2,
+        Vector3,
         WebGLRenderer,
     } from 'three';
 
@@ -29,7 +37,7 @@
             {
                 type: 'image',
                 path: '/photospheres/demo/images/01.jpg',
-                lat: 0,
+                lat: -15,
                 lon: -30,
             },
             {
@@ -41,7 +49,7 @@
             {
                 type: 'image',
                 path: '/photospheres/demo/images/03.jpeg',
-                lat: 0,
+                lat: 15,
                 lon: 30,
             },
         ],
@@ -69,13 +77,16 @@
     let onPointerDownX = 0, onPointerDownY = 0
     let onPointerDownLon = 0, onPointerDownLat = 0
 
+    const pointerX = ref(0), pointerY = ref(0)
+    const raycaster = new Raycaster(new Vector3(0,0,0), new Vector3(0, 0, 1), 1, 10) 
+
     const camera = new PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000)
     const scene = new Scene()
     const renderer = new WebGLRenderer()
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.toneMapping = LinearToneMapping
 
-    const sphereGeometry = new SphereGeometry(500, 60, 40)
+    const sphereGeometry = new SphereGeometry(raycaster.far + 10, 60, 40) // set radius bigger than the raycaster's far param
     // invert the geometry to make all the faces point inwards (fixes x-mirroring)
     sphereGeometry.scale(-1, 1, 1)
 
@@ -88,12 +99,11 @@
     scene.add(camera)
 
     // Load all the photos (objects)
-    const objects = []
+    const objects: Array<{ mesh: Object3D }> = []
     const texLoader = new TextureLoader()
     for (const object of data.objects) {
         switch(object.type) {
             case 'image': {
-                
                 const tex = await texLoader.loadAsync(object.path)
                 const aspect = tex.width / tex.height
                 tex.colorSpace = SRGBColorSpace
@@ -107,10 +117,10 @@
                 const { x, y, z, phi, theta } = latLonToXYZ(object.lat, object.lon)
                 quadMesh.position.set(3*x, 3*y, 3*z)
                 const q = new Quaternion().setFromAxisAngle(quadMesh.up, Math.PI/2 - theta )
-                const r = new Quaternion().setFromAxisAngle({ x: 1, y: 0, z: 0}, Math.PI/2 - phi)
+                const r = new Quaternion().setFromAxisAngle({ x: -1, y: 0, z: 0}, Math.PI/2 - phi)
                 const s = q.multiply(r)
                 quadMesh.setRotationFromQuaternion(s)
-                objects.push({ mesh: quadMesh })
+                objects.push( { mesh: quadMesh } )
                 scene.add(quadMesh)
                 
                 break
@@ -138,11 +148,15 @@
     }
 
     const handlePointerMove = (event: PointerEvent) => {
+        pointerX.value = event.clientX
+        pointerY.value = event.clientY
+
         if (!event.isPrimary) return
         if (!isUserInteracting) return
 
-        lon.value = (onPointerDownX - event.clientX) * 0.1 + onPointerDownLon
-        lat.value = (event.clientY - onPointerDownY) * 0.1 + onPointerDownLat
+        lon.value = (onPointerDownX - pointerX.value) * 0.1 + onPointerDownLon
+        lat.value = (pointerY.value - onPointerDownY) * 0.1 + onPointerDownLat
+
     }
 
     const handlePointerUp = (event: PointerEvent) => {
@@ -160,6 +174,19 @@
         const { x, y, z } = latLonToXYZ(lat.value, lon.value)
         // console.log(x, y, z)
         camera.lookAt( x, y, z );
+
+        const v = new Vector2((pointerX.value / window.innerWidth)*2-1, (pointerY.value / window.innerHeight)*2-1)
+        // console.log(v)
+        raycaster.setFromCamera(v, camera)
+        const intersections = raycaster.intersectObjects(scene.children, false)
+        if (intersections.length > 0) {
+            const intersected = intersections[0]?.object
+            if (isDefined(intersected)) {
+                console.log(objects.find(o => o.mesh === intersected)?.mesh.uuid)
+            }
+
+        }
+
         renderer.render(scene, camera)
         requestAnimationFrame(runAnimation)
     }
