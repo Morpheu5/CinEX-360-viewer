@@ -9,7 +9,7 @@
 
 <script setup lang="ts">
     import { isDefined } from '@vueuse/core';
-import type {
+    import type {
         Object3D
     } from 'three';
     import {
@@ -30,6 +30,11 @@ import type {
         Vector3,
         WebGLRenderer,
     } from 'three';
+
+    type InstancedObject = {
+        mesh: Object3D,
+        path: string
+    }
 
     const data = {
         panorama: '/photospheres/demo/demo.jpg',
@@ -78,13 +83,14 @@ import type {
     let onPointerDownLon = 0, onPointerDownLat = 0
 
     const pointerX = ref(0), pointerY = ref(0)
-    const raycaster = new Raycaster(new Vector3(0,0,0), new Vector3(0, 0, 1), 1, 10) 
+    const raycaster = new Raycaster(new Vector3(0,0,0), new Vector3(0, 0, 1), 0.1, 100) 
 
     const camera = new PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 1000)
     const scene = new Scene()
     const renderer = new WebGLRenderer()
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.toneMapping = LinearToneMapping
+    renderer.setSize(window.innerWidth, window.innerHeight)
 
     const sphereGeometry = new SphereGeometry(raycaster.far + 10, 60, 40) // set radius bigger than the raycaster's far param
     // invert the geometry to make all the faces point inwards (fixes x-mirroring)
@@ -99,7 +105,7 @@ import type {
     scene.add(camera)
 
     // Load all the photos (objects)
-    const objects: Array<{ mesh: Object3D }> = []
+    const objects: Array<InstancedObject> = []
     const texLoader = new TextureLoader()
     for (const object of data.objects) {
         switch(object.type) {
@@ -120,7 +126,10 @@ import type {
                 const r = new Quaternion().setFromAxisAngle({ x: -1, y: 0, z: 0}, Math.PI/2 - phi)
                 const s = q.multiply(r)
                 quadMesh.setRotationFromQuaternion(s)
-                objects.push( { mesh: quadMesh } )
+                objects.push({
+                    mesh: quadMesh,
+                    ...object
+                })
                 scene.add(quadMesh)
                 
                 break
@@ -128,9 +137,11 @@ import type {
         }
     }
 
-
     const resizeCanvas = () => {
-        renderer.setSize(window.innerWidth, window.innerHeight)
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        )
         camera.aspect = window.innerWidth / window.innerHeight
         camera.updateProjectionMatrix()
     }
@@ -152,7 +163,22 @@ import type {
         pointerY.value = event.clientY
 
         if (!event.isPrimary) return
+
+        const v = new Vector2((pointerX.value / window.innerWidth)*2-1, (pointerY.value / window.innerHeight)*2-1)
+        raycaster.setFromCamera(v, camera)
+        const intersections = raycaster.intersectObjects(scene.children, true)
+        if (intersections.length > 0) {
+            const intersected = intersections[0]?.object
+            if (isDefined(intersected)) {
+                const o = objects.find(o => o.mesh === intersected)
+                console.log(o?.path)
+            }
+        }
+
+
         if (!isUserInteracting) return
+
+
 
         lon.value = (onPointerDownX - pointerX.value) * 0.1 + onPointerDownLon
         lat.value = (pointerY.value - onPointerDownY) * 0.1 + onPointerDownLat
@@ -167,25 +193,11 @@ import type {
 
     const handleClick = (event: PointerEvent) => {
         if (!event.isPrimary) return
-
     }
 
     const runAnimation = () => {
         const { x, y, z } = latLonToXYZ(lat.value, lon.value)
-        // console.log(x, y, z)
         camera.lookAt( x, y, z );
-
-        const v = new Vector2((pointerX.value / window.innerWidth)*2-1, (pointerY.value / window.innerHeight)*2-1)
-        // console.log(v)
-        raycaster.setFromCamera(v, camera)
-        const intersections = raycaster.intersectObjects(scene.children, false)
-        if (intersections.length > 0) {
-            const intersected = intersections[0]?.object
-            if (isDefined(intersected)) {
-                console.log(objects.find(o => o.mesh === intersected)?.mesh.uuid)
-            }
-
-        }
 
         renderer.render(scene, camera)
         requestAnimationFrame(runAnimation)
@@ -206,7 +218,7 @@ import type {
 </script>
 
 <style lang="pcss" scoped>
-    html {
+    /* html {
         padding: 0;
         margin: 0;
     }
@@ -224,12 +236,16 @@ import type {
         margin: 0;
         padding: 0;
     }
-</style>
 
-<style lang="pcss" scoped>
-#debugger {
-    position: absolute;
-    background: white;
-    padding: 10px;
-}
+    #usepointer {
+        padding: 10px;
+    }
+    */
+
+    aside#debugger {
+        position: absolute;
+        background: white;
+        padding: 0.25em 1em;
+        z-index: 1000;
+    }
 </style>
