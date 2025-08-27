@@ -27,6 +27,7 @@
         Vector3,
         WebGLRenderer,
     } from 'three';
+    import type { Object3D } from 'three';
     import { isDefined } from '@vueuse/core';
     import type { InstancedObject, Nullable } from '~/types/cinex';
 
@@ -56,7 +57,7 @@
             ],
             links: [
                 {
-                    sceneName: 'testing_1',
+                    sceneName: 'testing_2',
                     lat: 0,
                     lon: 0,
                 }
@@ -87,7 +88,7 @@
             links: [
                 {
                     type: 'link',
-                    sceneName: 'testing_2',
+                    sceneName: 'testing_1',
                     lat: 0,
                     lon: 90,
                 }
@@ -115,11 +116,13 @@
 
     const setupScene = async (sceneName: string) => {
         currentScene = sceneName
+        const oldObjects: Array<Object3D> = []
         scene.traverse(object => {
-            if (object instanceof Mesh) {
-                object.removeFromParent()
+            if (isDefined(object) && object instanceof Mesh) {
+                oldObjects.push(object)
             }
         })
+        oldObjects.forEach((v,_i) => v.removeFromParent())
 
         const sphereGeometry = new SphereGeometry(raycaster.far + 10, 60, 40) // set radius bigger than the raycaster's far param
         // invert the geometry to make all the faces point inwards (fixes x-mirroring)
@@ -212,12 +215,6 @@
 
     await setupScene('testing_1')
 
-    const pointerGeom = new SphereGeometry(1, 8, 8)
-    const pointerMat = new MeshBasicMaterial({ color: 0xff0000 })
-    const pointerMesh = new Mesh(pointerGeom, pointerMat)
-    pointerMesh.position.set(50, 0, 0)
-    scene.add(pointerMesh)
-
     const resizeCanvas = () => {
         renderer.setSize(
             window.innerWidth,
@@ -271,7 +268,11 @@
     const handleClick = (event: PointerEvent) => {
         if (!event.isPrimary) return
 
-        console.log(".", currentIntersection)
+        // console.log(".", currentIntersection)
+        if (isDefined(currentIntersection)) {
+            // TODO Point the camera with back to the source point?
+            setupScene(currentIntersection.sceneName || "")
+        }
     }
 
     const runAnimation = () => {
