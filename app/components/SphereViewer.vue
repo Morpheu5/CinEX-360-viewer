@@ -6,6 +6,9 @@
         <p>{{ currentIntersection }}</p>
     </aside> -->
     <div id="viewer" ref="viewer" />
+    <dialog id="gallery-viewer" ref="galleryViewer" class="p-6">
+        <h1 class="">Gallery</h1>
+    </dialog>
 </template>
 
 <script setup lang="ts">
@@ -31,28 +34,28 @@
     import { isDefined } from '@vueuse/core';
     import type { InstancedObject, Nullable } from '~/types/cinex';
 
-
     const data = {
         'testing_1': {
             panorama: '/photospheres/demo/demo.jpg',
             objects: [
                 {
-                    type: 'image',
-                    path: '/photospheres/demo/images/01.jpg',
-                    lat: -15,
-                    lon: -30,
-                },
-                {
-                    type: 'image',
-                    path: '/photospheres/demo/images/02.jpeg',
+                    type: 'gallery',
                     lat: 0,
-                    lon: 0,
-                },
-                {
-                    type: 'image',
-                    path: '/photospheres/demo/images/03.jpeg',
-                    lat: 15,
-                    lon: 30,
+                    lon: -30,
+                    gallery: [
+                       {
+                            type: 'image',
+                            path: '/photospheres/demo/images/01.jpg',
+                        },
+                        {
+                            type: 'image',
+                            path: '/photospheres/demo/images/02.jpeg',
+                        },
+                        {
+                            type: 'image',
+                            path: '/photospheres/demo/images/03.jpeg',
+                        },
+                    ]
                 },
             ],
             links: [
@@ -67,22 +70,22 @@
             panorama: '/photospheres/demo/demo.jpg',
             objects: [
                 {
-                    type: 'image',
-                    path: '/photospheres/demo/images/01.jpg',
                     lat: 15,
-                    lon: -30,
-                },
-                {
-                    type: 'image',
-                    path: '/photospheres/demo/images/02.jpeg',
-                    lat: 0,
                     lon: 0,
-                },
-                {
-                    type: 'image',
-                    path: '/photospheres/demo/images/03.jpeg',
-                    lat: -15,
-                    lon: 30,
+                    gallery: [
+                       {
+                            type: 'image',
+                            path: '/photospheres/demo/images/01.jpg',
+                        },
+                        {
+                            type: 'image',
+                            path: '/photospheres/demo/images/02.jpeg',
+                        },
+                        {
+                            type: 'image',
+                            path: '/photospheres/demo/images/03.jpeg',
+                        },
+                    ]
                 },
             ],
             links: [
@@ -138,37 +141,35 @@
 
         // Load all the photos (objects)
         const texLoader = new TextureLoader()
-        /*
         for (const object of data[sceneName].objects) {
             switch(object.type) {
-                case 'image': {
-                    const tex = await texLoader.loadAsync(object.path)
+                case 'gallery': {
+                    const tex = await texLoader.loadAsync('/icons/gallery.png')
                     const aspect = tex.width / tex.height
-                    tex.colorSpace = SRGBColorSpace
                     const mat = new MeshBasicMaterial({
                         color: 0xffffff,
                         map: tex,
                         side: DoubleSide,
+                        transparent: true
                     })
-                    const quadGeom = new PlaneGeometry(aspect, 1) // TODO Change the size appropriately
-                    const quadMesh = new Mesh(quadGeom, mat)
+                    const iconGeom = new PlaneGeometry(aspect/2.5, 1/2.5)
+                    const iconMesh = new Mesh(iconGeom, mat)
                     const { x, y, z, phi, theta } = latLonToXYZ(object.lat, object.lon)
-                    quadMesh.position.set(3*x, 3*y, 3*z)
-                    const q = new Quaternion().setFromAxisAngle(quadMesh.up, Math.PI/2 - theta )
+                    iconMesh.position.set(3*x, 3*y, 3*z)
+                    const q = new Quaternion().setFromAxisAngle(iconMesh.up, Math.PI/2 - theta )
                     const r = new Quaternion().setFromAxisAngle({ x: -1, y: 0, z: 0}, Math.PI/2 - phi)
                     const s = q.multiply(r)
-                    quadMesh.setRotationFromQuaternion(s)
+                    iconMesh.setRotationFromQuaternion(s)
                     objects.push({
-                        mesh: quadMesh,
-                        ...object
+                        mesh: iconMesh,
+                        type: 'gallery',
+                        ...object,
                     })
-                    scene.add(quadMesh)
-                    
+                    scene.add(iconMesh)
                     break
                 }
             }
         }
-        */
 
         for (const link of data[sceneName].links) {
             const tex = await texLoader.loadAsync('/icons/jump_point.png')
@@ -189,6 +190,7 @@
             iconMesh.setRotationFromQuaternion(s)
             objects.push({
                 mesh: iconMesh,
+                type: 'link',
                 ...link,
             })
             scene.add(iconMesh)
@@ -196,6 +198,8 @@
     }
 
     const viewer = ref()
+    const galleryViewer = ref<HTMLDialogElement>()
+    let galleryViewerOpen = false
 
     let isUserInteracting = false
 
@@ -266,12 +270,18 @@
     }
 
     const handleClick = (event: PointerEvent) => {
-        if (!event.isPrimary) return
+        if (!event.isPrimary || galleryViewerOpen) return
 
         // console.log(".", currentIntersection)
         if (isDefined(currentIntersection)) {
             // TODO Point the camera with back to the source point?
-            setupScene(currentIntersection.sceneName || "")
+            if (currentIntersection.type === 'link') {
+                setupScene(currentIntersection.sceneName || "")
+            } else if (currentIntersection.type === 'gallery') {
+                console.log(currentIntersection.gallery)
+                galleryViewer.value?.showModal()
+                galleryViewerOpen = true
+            }
         }
     }
 
@@ -293,6 +303,9 @@
         window.addEventListener('pointermove', handlePointerMove)
         window.addEventListener('pointerup', handlePointerUp)
         window.addEventListener('click', handleClick)
+
+        galleryViewer?.value?.addEventListener('close', () => galleryViewerOpen = false)
+        galleryViewer?.value?.addEventListener('close', () => galleryViewerOpen = false)
         runAnimation()
     })
 </script>
